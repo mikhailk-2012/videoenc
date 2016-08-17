@@ -53,6 +53,7 @@ static struct option long_options[] =
     {"qmin-max", required_argument, 0, 'q'},
     {"key-int", required_argument, 0, 'k'},
     {"output-list",   required_argument, 0, 'o'},
+    {"duration",   required_argument, 0, 't'},
     {0, 0, 0, 0}
 };
 
@@ -69,8 +70,9 @@ static  void help()
   printf( "   --size,-s      - video source size ( default = 640x480 )\n" );
   printf( "   --size-out,-z  - H264 video size output ( default = same as input )\n" );
   printf( "   --qmin-max,-q  - encoding quality ( default = -q 20,30 )\n" );
-  printf( "   --key-int,-k   - key frmae interval ( default = 5 )\n" );
+  printf( "   --key-int,-k   - key frame interval ( default = 5 )\n" );
   printf( "   --output-list,-o - list of output FIFO's ( default = None, example: -o /tmp/o1.h264, /tmp/o2.h264, /tmp/o3.nv12 )\n" );
+  printf( "   --duration,-t - duration of capture ( default = 0, example: -t 120 )\n" );
   printf( "\n\n" );
 }
 
@@ -87,6 +89,7 @@ static  void dumpOptions( CmdLineOptions & options )
   printf( "qMin       [%d]\n", options.qMin );
   printf( "qMax       [%d]\n", options.qMax );
   printf( "KeyInterval[%d]\n", options.keyInterval );
+  printf( "Duration   [%d]\n", options.duration );
 
   for( size_t i = 0; i < options.outFifos.size(); i++ )
   {
@@ -104,7 +107,7 @@ int processCmdLineOptions( CmdLineOptions & options, int argc, char **argv )
    {
 	  /* getopt_long stores the option index here. */
 	  int option_index = 0;
-	  c = getopt_long (argc, argv, "h:i:b:r:s:z:q:o:k:", long_options, &option_index);
+	  c = getopt_long (argc, argv, "h:i:b:r:t:s:z:q:o:k:", long_options, &option_index);
 	  /* Detect the end of the options. */
 	  if (c == -1)
 	    break;
@@ -122,6 +125,10 @@ int processCmdLineOptions( CmdLineOptions & options, int argc, char **argv )
 	    case 'r':
 	      options.fps = atoi( optarg );
 	      break;
+
+            case 't':
+              options.duration = atoi( optarg );
+              break;
 
 	    case 'k':
 	      options.keyInterval = atoi( optarg );
