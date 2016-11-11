@@ -50,6 +50,8 @@ unsigned int input_size  = mwidth * (mheight + mheight / 2);
 int Y_size   = mwidth * mheight;
 int UV_size  = mwidth * mheight / 2;
 
+unsigned int duration = 0;
+
 int g_msDelay = 0;
 
 VencHeaderData  sps_pps_data;
@@ -454,6 +456,7 @@ void handle_int(int n)
 
 int main( int argc, char **argv )
 {
+   time_t time_start, time_now;
    int err = 0;
    err = processCmdLineOptions( g_options, argc, argv );
    VideoEncoder* pVideoEnc = NULL;
@@ -465,6 +468,7 @@ int main( int argc, char **argv )
     mheight = g_options.height;
     src_width  = mwidth;
     src_height = mheight;
+    duration = g_options.duration;
 
     dst_width  = g_options.width_out;
     dst_height = g_options.height_out;
@@ -627,15 +631,19 @@ int main( int argc, char **argv )
      if (err || !venc_cxt->thread_enc_id) {
 	printf("Create thread_enc_id fail !\n");
      }
-
+     // This is right after the encoding thread has started, get the time to calculate the duration
+     time(&time_start);
      struct sigaction sigact;
      memset(&sigact, 0, sizeof(sigact));
      sigact.sa_handler = handle_int;
-     while( !quit && venc_cxt->mstart )
+     time(&time_now);
+     while( !quit && venc_cxt->mstart && ((duration > 0 && difftime(time_now, time_start) < duration) || duration == 0))
      {
         if( cameraOn && !venc_cxt->CameraDevice->getState( venc_cxt->CameraDevice ) )
 	    break;
   	sleep( 1 );
+        // Get current time to check whether we need to stop to stay within the specified duration
+        time(&time_now);
      }
      pthread_mutex_lock( &g_mutex );
      pthread_cond_signal( &g_cond );

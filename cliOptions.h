@@ -34,6 +34,7 @@ Inputs:
 -z <WxH> - output dim.
 -q <Min,Max>
 -o <x.h264>,<z.nv12>
+-t <secs> - duration of capture
 */
 
 struct CmdLineOptions
@@ -48,6 +49,7 @@ struct CmdLineOptions
   size_t      qMin;
   size_t      qMax;
   size_t      keyInterval;
+  unsigned int duration;
   std::vector< std::string > outFifos;
 };
 
