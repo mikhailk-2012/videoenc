@@ -30,7 +30,7 @@ SRCDIRS:=. Camera watermark
 
 CFLAGS =-Wall -O3 -ldl -pthread -std=c++11
 
-INCLUDES:=$(foreach dir,$(SRCDIRS),-I$(dir)) -I.
+INCLUDES:=$(foreach dir,$(SRCDIRS),-I$(dir)) -I. -I./libyuv/include
 
 SRCCS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c))
 SRCPPS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.cpp))
@@ -38,7 +38,12 @@ SRCPPS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.cpp))
 LIBOBJ=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCCS)))) 
 LIBOBJ+=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCPPS)))) 
 
-LDFLAGS= -lvencoder -lcdx_base -lMemAdapter -lVE -L/usr/local/lib/cedarx -ldl -lm -lpthread
+LDFLAGS= -ldl -lm -lpthread ./libyuv/libyuv.a
+ifeq ($(shell pkg-config --exists cedarx; echo $$?),0)
+LDFLAGS += $(shell pkg-config --libs cedarx)
+else
+LDFLAGS += -lvencoder -lcdx_base -lMemAdapter -lVE -L/usr/local/lib/cedarx
+endif
 
 all: $(TARGET)
 

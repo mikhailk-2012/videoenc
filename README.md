@@ -46,7 +46,7 @@ This test uses Armbian OS for H3, version 3.4.110+
 Compilation is simple, grab the sources and:
 
 
-First, install the provided BLOBs. They have been packaged in the "blobs" directory of the repository.
+1) install the provided BLOBs. They have been packaged in the "blobs" directory of the repository.
 
 Go to:
 
@@ -54,25 +54,37 @@ Go to:
 	tar xzvf [root_of_git_repo]/blobs/cedarx_blobs.tar.gz
 
 
-Now, you need to config the ".so" libraries, adding:
+2) you need to config the ".so" libraries, adding:
 
     nano "/etc/ld.so.conf.d/cedarx.conf",  and the content below:
 
     # Cedarx configuration
     /usr/local/lib/cedarx
 
-and once you save this file:
+3) Once you save this file:
 
     ldconfig
     
-Once this setup is done:
+4) Build libyuv
+
+	git submodule init
+	git submodule update
+	cd libyuv/; make -f linux.mk libyuv.a; cd ../
+    
+5) Once this setup is done:
 
     make
-
+    
 
 This should compile and link, and you should get an utility called: "videoenc".
 
 NOTE: at this stage, no "install" target, but maybe added later.
+
+For C.H.I.P running Debian Jessie, Linux 4.4, Replace steps 1-3 above with:
+
+	1) Install and load sunxi-cedar-mod.ko (https://github.com/mzakharo/sunxi_cedar) driver
+
+	2) Build and install CedarX (https://github.com/mzakharo/CedarX-12.06.2015) library
 
 
 Testing the Encoder Demo

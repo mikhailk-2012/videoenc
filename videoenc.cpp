@@ -33,6 +33,7 @@
 #include <string>
 
 #include "aw/vencoder.h"
+#include "libyuv.h"
 
 #include "CameraSource.h"
 #include "water_mark.h"
@@ -368,8 +369,11 @@ int CameraSourceCallback(void *cookie,  void *data)
 	//nPts = 9*(nPts/10);
 	//input_buffer.nPts  = nPts;
 	if( CameraDevice->isYUYV ) {
-	  
-	    v4lconvert_yuyv_to_yuv420((const unsigned char *)buffer, (unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC, mwidth, mheight, 0 );
+
+        libyuv::YUY2ToNV12(buffer, mwidth * 2,
+                input_buffer.pAddrVirY, mwidth,
+                input_buffer.pAddrVirC, mwidth,
+                mwidth, mheight);
         }
 	else {
 	      //LOGD("Cam - convert from yuyv1 =%d\n", Y_size );
@@ -514,7 +518,7 @@ int main( int argc, char **argv )
 	
     baseConfig.nDstWidth    = dst_width;
     baseConfig.nDstHeight   = dst_height;
-    baseConfig.eInputFormat = VENC_PIXEL_YUV420P;
+    baseConfig.eInputFormat = VENC_PIXEL_YUV420SP;
     //baseConfig.eInputFormat = VENC_PIXEL_YUYV422;
 	
     bufferParam.nSizeY = baseConfig.nInputWidth*baseConfig.nInputHeight;
