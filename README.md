@@ -65,7 +65,13 @@ Go to:
 
     ldconfig
     
-4) Once this setup is done:
+4) Build libyuv
+
+	git submodule init
+	git submodule update
+	cd libyuv/; make -f linux.mk libyuv.a; cd ../
+    
+5) Once this setup is done:
 
     make
     
