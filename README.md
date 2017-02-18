@@ -69,7 +69,7 @@ Go to:
 
 	git submodule init
 	git submodule update
-	cd libyuv/; make -f linux.mk libyuv.a; cd ../
+	cd libyuv/; make -f linux.mk CXX="g++ -mfpu=neon" libyuv.a; cd ../
     
 5) Once this setup is done:
 
