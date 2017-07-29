@@ -515,12 +515,14 @@ int main( int argc, char **argv )
     baseConfig.nInputWidth  = src_width;
     baseConfig.nInputHeight = src_height;
     baseConfig.nStride      = src_width;
-	
+
     baseConfig.nDstWidth    = dst_width;
     baseConfig.nDstHeight   = dst_height;
-    baseConfig.eInputFormat = VENC_PIXEL_YUV420SP;
+    
+    //baseConfig.eInputFormat = VENC_PIXEL_YUV420SP;
+    baseConfig.eInputFormat = VENC_PIXEL_YUV420P;
     //baseConfig.eInputFormat = VENC_PIXEL_YUYV422;
-	
+    
     bufferParam.nSizeY = baseConfig.nInputWidth*baseConfig.nInputHeight;
     bufferParam.nSizeC = baseConfig.nInputWidth*baseConfig.nInputHeight/2;
     bufferParam.nBufferNum = 4;
