@@ -13,7 +13,7 @@ rm -f $LOGFILE
 
 doLog 'Starting creating file'
 
-ffmpeg -y $ENC_VIDEO -c:v copy -an -ss 5.000 -t "30.000" -f mp4 /tmp/result.mp4
+ffmpeg -y $ENC_VIDEO -c:v copy -an -ss 5.000 -t "30.000" -r 25 -f mp4 ./result.mp4
 
 doLog 'done creating file'
 exit 0

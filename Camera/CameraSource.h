@@ -15,8 +15,10 @@ typedef struct CameraDataCallbackType{
 typedef struct AWCameraDevice
 {
 	void *context;
-        int  isYUYV;
-        const char *deviceName;
+    int  isYUYV;
+    int  isTvd;
+    const char *deviceName;
+    int  (*configureCamera)(struct AWCameraDevice *p);
 	int  (*startCamera)(struct AWCameraDevice *p);
 	int  (*stopCamera)(struct AWCameraDevice *p);
 	int  (*returnFrame)(struct AWCameraDevice *p, int id);
@@ -24,10 +26,10 @@ typedef struct AWCameraDevice
 	int  (*getState)(struct AWCameraDevice *p);
 }AWCameraDevice;
 
-AWCameraDevice *CreateCamera(int width, int height);
+AWCameraDevice *CreateCamera(int width, int height, int framerate);
 void DestroyCamera(AWCameraDevice* camera);
 void* getV4L2ctx(AWCameraDevice *p);
-int  getV4L2FormatAndSize(AWCameraDevice *p, int *width, int *height, int *pix_fmt );
+int  getV4L2FormatAndSize(AWCameraDevice *p, int *width, int *height, int *pix_fmt, int* fps);
 
 #ifdef __cplusplus
 }

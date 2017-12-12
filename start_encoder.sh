@@ -1,7 +1,7 @@
 #! /bin/bash
 
 FFMPEG=/usr/local/bin/ffmpeg
-SRC_VIDEO=/dev/video0
+SRC_VIDEO=/dev/video1
 ROOT_DIR="`pwd`"
 
 # ENC_TP="in-enc"
@@ -27,9 +27,11 @@ do
 	'v4l2-enc' )
             rm -rf /tmp/out*.h264 /tmp/out*.nv12
             mkfifo /tmp/out1.h264
-            mkfifo /tmp/out2.nv12
+#            mkfifo /tmp/out2.nv12
             echo "Starting H264 Encoder..."
-	    $ROOT_DIR/videoenc -i $SRC_VIDEO -k 2 -r 25 -b 1024 -s 640x480 -o /tmp/out1.h264
+#	    $ROOT_DIR/videoenc -i $SRC_VIDEO -k 4 -r 15 -b 1800 -q 10,46 -s 864x480 -o /tmp/out1.h264
+	    $ROOT_DIR/videoenc -i /dev/video1 -k 8 -r 25 -b 5000 -q 10,40 -s 720x576 -o /tmp/out1.h264
+
     	    ;;
     esac
     sleep 5

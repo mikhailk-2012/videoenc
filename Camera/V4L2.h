@@ -8,7 +8,7 @@ extern "C" {
 #include "videodev.h"
 
 // Number of Buffers to request... 
-#define BUFFER_NUMBER  8
+#define BUFFER_NUMBER  5
 #define MAX_BUFFER_NUM 16
 
 typedef struct v4l2_mem_map_t{
@@ -41,6 +41,7 @@ int getPreviewFrame(void* v4l2ctx, struct v4l2_buffer *buf);
 int tryFmt(void* v4l2ctx, int format);
 int tryFmtSize(void* v4l2ctx, int * width, int * height);
 int getFrameRate(void* v4l2ctx);
+int getTvd(void* v4l2ctx);
 int setImageEffect(void* v4l2ctx, int effect);
 int setWhiteBalance(void* v4l2ctx, int wb);
 int setExposure(void* v4l2ctx, int exp);

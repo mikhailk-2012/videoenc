@@ -64,37 +64,57 @@ void CloseCamera(void* v4l2ctx)
 	closeCameraDevice(v4l2ctx);
 }
 
-int StartCamera(void* v4l2ctx, int *width, int *height)
+int ConfigureCamera(void* v4l2ctx, int *width, int *height, int framerate)
 {
 	int ret = 0;
-	//	int pix_fmt = V4L2_PIX_FMT_NV12;
-	int pix_fmt = V4L2_PIX_FMT_YUYV;
-	int mframerate = 30;
-	int mbuffernuber = BUFFER_NUMBER;
+	int pix_fmt = V4L2_PIX_FMT_NV12;
+	//int pix_fmt = V4L2_PIX_FMT_YUYV;
+	int mframerate = framerate; //30;
+
 
 	// set capture mode
 	struct v4l2_streamparm params;
-  	params.parm.capture.timeperframe.numerator = 1;
+	params.parm.capture.timeperframe.numerator = 1;
 	params.parm.capture.timeperframe.denominator = mframerate;
 	params.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	params.parm.capture.capturemode = V4L2_MODE_VIDEO;
 
-	v4l2setCaptureParams(v4l2ctx, &params);
+	ret =v4l2setCaptureParams(v4l2ctx, &params);
+	if (ret)
+		return ret;
 
 	// set v4l2 device parameters
-	v4l2SetVideoParams(v4l2ctx, width, height, pix_fmt);
+	ret = v4l2SetVideoParams(v4l2ctx, width, height, pix_fmt);
+	if (ret)
+		return ret;
 
 	// set fps
-	v4l2setCaptureParams(v4l2ctx,&params);
+	ret =v4l2setCaptureParams(v4l2ctx,&params);
+	if (ret)
+		return ret;
+
+	return 0;
+}
+
+int StartCamera(void* v4l2ctx)
+{
+	int ret = 0;
+	int mbuffernuber = BUFFER_NUMBER;
 	
 	// v4l2 request buffers
-	v4l2ReqBufs(v4l2ctx, &mbuffernuber);
+	ret =v4l2ReqBufs(v4l2ctx, &mbuffernuber);
+	if (ret)
+			return ret;
 
 	// v4l2 query buffers
-	v4l2QueryBuf(v4l2ctx);
+	ret =v4l2QueryBuf(v4l2ctx);
+	if (ret)
+			return ret;
 	
 	// stream on the v4l2 device
-	v4l2StartStreaming(v4l2ctx);
+	ret =v4l2StartStreaming(v4l2ctx);
+	if (ret)
+			return ret;
 
     return 0;
 }

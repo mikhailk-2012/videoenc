@@ -17,18 +17,19 @@
 # * MA 02110-1301, USA.
 # *
 # */
+CROSS_COMPILE ?= /opt/linaro/gcc-linaro-arm-linux-gnueabihf/bin/arm-linux-gnueabihf-
 
-CC = gcc
-CPP =g++
-STRIP = strip
-AR = ar
+CC = $(CROSS_COMPILE)gcc
+CPP =$(CROSS_COMPILE)g++
+STRIP = $(CROSS_COMPILE)strip
+AR = $(CROSS_COMPILE)ar
 
 TARGET=videoenc
 BUILDPATH=.
 
 SRCDIRS:=. Camera watermark
 
-CFLAGS =-Wall -O3 -ldl -pthread -std=c++11
+CFLAGS =-Wall -O3 -ldl -pthread -std=c++11 -ggdb
 
 INCLUDES:=$(foreach dir,$(SRCDIRS),-I$(dir)) -I.
 
@@ -38,7 +39,8 @@ SRCPPS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.cpp))
 LIBOBJ=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCCS)))) 
 LIBOBJ+=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCPPS)))) 
 
-LDFLAGS= -lvencoder -lcdx_base -lMemAdapter -lVE -L/usr/local/lib/cedarx -ldl -lm -lpthread
+#LDFLAGS=  -lcdx_base -ldl -lm -lpthread -lvencoder -lMemAdapter -lVE -L/usr/local/lib/cedarx
+LDFLAGS= -L./../sunxi-cedarx2/src -ldl -lm -lpthread -lcedar_vencoder -lcedar_common -lcedar_base -ggdb
 
 all: $(TARGET)
 

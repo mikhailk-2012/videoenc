@@ -29,6 +29,7 @@ typedef struct V4L2_CONTEXT{
 	char mDeviceName[MAX_DEVICE_NAME_LENGTH];
 	int width;
 	int height;
+	int is_tvd;
 	v4l2_mem_map_t mMapMem;
 }V4L2_CONTEXT;
 
@@ -45,18 +46,25 @@ void *CreateV4l2Context()
 	//init param
 	strcpy(V4L2_Contect->mDeviceName, DEVICE_NAME );
 	V4L2_Contect->mDeviceID = 0;
-	V4L2_Contect->mCaptureFormat = V4L2_PIX_FMT_NV12;
-	//V4L2_Contect->mCaptureFormat = V4L2_PIX_FMT_YUYV;
+	//V4L2_Contect->mCaptureFormat = V4L2_PIX_FMT_NV12;
+	V4L2_Contect->mCaptureFormat = V4L2_PIX_FMT_YUYV;
 	LOGD("V4L2 - V4L2_PIX_FMT_NV12 = %d", V4L2_PIX_FMT_NV12 );
 	LOGD("V4L2 - V4L2_PIX_FMT_YUYV = %d", V4L2_PIX_FMT_YUYV );
 	return (void *)V4L2_Contect;
 }
 
+
+int getTvd(void* v4l2ctx)
+{
+	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
+	return V4L2_Contect->is_tvd;
+}
+
 void DestroyV4l2Context(void* v4l2ctx)
 {
 	if(!v4l2ctx)
-	  return;
-	
+		return;
+
 	free(v4l2ctx);
 	v4l2ctx = NULL;
 }
@@ -88,13 +96,15 @@ int openCameraDevice(void* v4l2ctx)
 	int ret = -1;
 	struct v4l2_input inp;
 	struct v4l2_capability cap; 
-	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
+	struct v4l2_dbg_chip_ident chip;
 
+	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
+	V4L2_Contect->is_tvd = 0;
 	// open V4L2 device
 	V4L2_Contect->mCamFd = open(V4L2_Contect->mDeviceName, O_RDWR | O_NONBLOCK, 0);
 	if (V4L2_Contect->mCamFd == -1) 
 	{ 
-        LOGE("ERROR opening %s", V4L2_Contect->mDeviceName); 
+		LOGE("ERROR opening %s", V4L2_Contect->mDeviceName);
 		return -1; 
 	}
 
@@ -107,24 +117,30 @@ int openCameraDevice(void* v4l2ctx)
 
 	// check v4l2 device capabilities
 	ret = ioctl (V4L2_Contect->mCamFd, VIDIOC_QUERYCAP, &cap); 
-    if (ret < 0) 
+	if (ret < 0)
 	{ 
-        LOGE("Error opening device: unable to query device."); 
-        goto END_ERROR;
-    } 
+		LOGE("Error opening device: unable to query device.");
+		goto END_ERROR;
+	}
 
-    if ((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) == 0) 
+	if ((cap.capabilities & V4L2_CAP_VIDEO_CAPTURE) == 0)
 	{ 
-        LOGE("Error opening device: video capture not supported."); 
-        goto END_ERROR;
-    } 
-  
-    if ((cap.capabilities & V4L2_CAP_STREAMING) == 0) 
+		LOGE("Error opening device: video capture not supported.");
+		goto END_ERROR;
+	}
+
+	if ((cap.capabilities & V4L2_CAP_STREAMING) == 0)
 	{ 
-        LOGE("Capture device does not support streaming i/o"); 
-        goto END_ERROR;
-    } 
-	
+		LOGE("Capture device does not support streaming i/o");
+		goto END_ERROR;
+	}
+	// check TV-IN
+	if (strcmp("tvd", cap.card) ==0)
+	{
+		V4L2_Contect->is_tvd = 1;
+	}
+
+
 	// try to support this format: NV21, YUYV
 	// we do not support mjpeg camera now
 	if (tryFmt(v4l2ctx, V4L2_PIX_FMT_NV12) == 0)
@@ -146,14 +162,14 @@ int openCameraDevice(void* v4l2ctx)
 	LOGD("open camera device ok-------");
 	return 0;
 
-END_ERROR:
+	END_ERROR:
 
 	if (V4L2_Contect->mCamFd != 0)
 	{
 		close(V4L2_Contect->mCamFd);
 		V4L2_Contect->mCamFd = 0;
 	}
-	
+
 	return -1;
 }
 
@@ -180,40 +196,87 @@ int v4l2SetVideoParams(void* v4l2ctx, int* width, int* height, int pix_fmt)
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
 
 	LOGV("%s, line: %d, w: %d, h: %d, pfmt: %d", 
-		__FUNCTION__, __LINE__, *width, *height, pix_fmt);
+			__FUNCTION__, __LINE__, *width, *height, pix_fmt);
 
-	
-    memset(&format, 0, sizeof(format));
-    format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-    format.fmt.pix.width  = *width; 
-    format.fmt.pix.height = *height; 
-    if (V4L2_Contect->mCaptureFormat == V4L2_PIX_FMT_YUYV)
+
+	if (getTvd(v4l2ctx))
 	{
-    	format.fmt.pix.pixelformat = V4L2_Contect->mCaptureFormat; 
+		struct v4l2_format fmt_priv;
+		memset ((void*)&fmt_priv, 0, sizeof(fmt_priv));
+		fmt_priv.type                = V4L2_BUF_TYPE_PRIVATE;
+		fmt_priv.fmt.raw_data[0] =0;//interface 0=composite 1=ypbpr
+		// select system pal/ntsc
+		// 720*576 = pal
+		// 720*480 = ntsc
+		if ((*width == 720) && (*height == 576))
+			fmt_priv.fmt.raw_data[1] =1; //system   0-ntsc 1-pal
+		else if ((*width == 720) && (*height == 480))
+			fmt_priv.fmt.raw_data[1] =0; //system   0-ntsc 1-pal
+		else
+		{
+			printf("Invalid width or height for sinxi-tvd\n");
+			printf("Set resolution to 720x576 for PAL system or 720x480 for NTSC\n");
+			return -1;
+		}
+		fmt_priv.fmt.raw_data[2] =0;//format 1=mb, for test only
+
+		fmt_priv.fmt.raw_data[8] =1;//2;//row
+		fmt_priv.fmt.raw_data[9] =1;//2;//column
+
+		fmt_priv.fmt.raw_data[10] =1;//channel_index
+		fmt_priv.fmt.raw_data[11] =0;//2;//channel_index
+		fmt_priv.fmt.raw_data[12] =0;//3;//channel_index
+		fmt_priv.fmt.raw_data[13] =0;//4;//channel_index
+		if (-1 == ioctl (V4L2_Contect->mCamFd, VIDIOC_S_FMT, &fmt_priv))
+		{
+			printf("VIDIOC_S_FMT error!  a\n");
+			return -1;
+		}
+		memset ((void*)&fmt_priv, 0, sizeof(fmt_priv));
+		fmt_priv.type                = V4L2_BUF_TYPE_PRIVATE;
+		if (-1 == ioctl (V4L2_Contect->mCamFd, VIDIOC_G_FMT, &fmt_priv))
+		{
+			printf("VIDIOC_G_FMT error!  a\n");
+			return -1;
+		}
+		V4L2_Contect->width  = *width;
+		V4L2_Contect->height = *height;
+		V4L2_Contect->mCaptureFormat = V4L2_PIX_FMT_NV12;
 	}
 	else
 	{
-		format.fmt.pix.pixelformat = pix_fmt; 
-		V4L2_Contect->mCaptureFormat = pix_fmt;
+		memset(&format, 0, sizeof(format));
+		format.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+		format.fmt.pix.width  = *width;
+		format.fmt.pix.height = *height;
+		if (V4L2_Contect->mCaptureFormat == V4L2_PIX_FMT_YUYV)
+		{
+			format.fmt.pix.pixelformat = V4L2_Contect->mCaptureFormat;
+		}
+		else
+		{
+			format.fmt.pix.pixelformat = pix_fmt;
+			V4L2_Contect->mCaptureFormat = pix_fmt;
+		}
+
+		format.fmt.pix.field = V4L2_FIELD_NONE;
+
+		ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_S_FMT, &format);
+		if (ret < 0)
+		{
+			LOGE("VIDIOC_S_FMT Failed: %s", strerror(errno));
+			return ret;
+		}
+
+		V4L2_Contect->width  = format.fmt.pix.width;
+		V4L2_Contect->height = format.fmt.pix.height;
 	}
-	
-	format.fmt.pix.field = V4L2_FIELD_NONE;
-	
-	ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_S_FMT, &format); 
-	if (ret < 0) 
-	{ 
-		LOGE("VIDIOC_S_FMT Failed: %s", strerror(errno)); 
-		return ret; 
-	} 
-	
-	V4L2_Contect->width  = format.fmt.pix.width;
-	V4L2_Contect->height = format.fmt.pix.height;
 
 	*width = V4L2_Contect->width;
 	*height = V4L2_Contect->height;
-	
+
 	LOGV("camera params: w: %d, h: %d, pfmt: %d, pfield: %d", 
-		V4L2_Contect->width, V4L2_Contect->height, pix_fmt, V4L2_FIELD_NONE);
+			V4L2_Contect->width, V4L2_Contect->height, pix_fmt, V4L2_FIELD_NONE);
 
 	return 0;
 }
@@ -229,21 +292,21 @@ int v4l2ReqBufs(void* v4l2ctx, int* buffernum)
 		LOGE("buffernum is too big");
 		return -1;
 	}
-    V4L2_Contect->mBufferCnt = *buffernum;
+	V4L2_Contect->mBufferCnt = *buffernum;
 
 	LOGV("TO VIDIOC_REQBUFS count: %d", V4L2_Contect->mBufferCnt);
-	
+
 	memset(&rb, 0, sizeof(rb));
-    rb.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-    rb.memory = V4L2_MEMORY_MMAP; 
-    rb.count  = V4L2_Contect->mBufferCnt; 
-	
+	rb.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	rb.memory = V4L2_MEMORY_MMAP;
+	rb.count  = V4L2_Contect->mBufferCnt;
+
 	ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_REQBUFS, &rb); 
-    if (ret < 0) 
+	if (ret < 0)
 	{ 
-        LOGE("Init: VIDIOC_REQBUFS failed: %s", strerror(errno)); 
+		LOGE("Init: VIDIOC_REQBUFS failed: %s", strerror(errno));
 		return ret;
-    } 
+	}
 
 	if (V4L2_Contect->mBufferCnt != (int)rb.count)
 	{
@@ -262,42 +325,42 @@ int v4l2QueryBuf(void* v4l2ctx)
 	int i;
 	struct v4l2_buffer buf;
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
+
 	for (i = 0; i < V4L2_Contect->mBufferCnt; i++) 
 	{  
-        memset (&buf, 0, sizeof (struct v4l2_buffer)); 
+		memset (&buf, 0, sizeof (struct v4l2_buffer));
 		buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
 		buf.memory = V4L2_MEMORY_MMAP; 
 		buf.index  = i; 
-		
+
 		ret = ioctl (V4L2_Contect->mCamFd, VIDIOC_QUERYBUF, &buf); 
-        if (ret < 0) 
+		if (ret < 0)
 		{ 
-            LOGE("Unable to query buffer (%s)", strerror(errno)); 
-            return ret; 
-        } 
- 
-        V4L2_Contect->mMapMem.mem[i] = mmap (0, buf.length, 
-                            PROT_READ | PROT_WRITE, 
-                            MAP_SHARED, 
-                            V4L2_Contect->mCamFd, 
-                            buf.m.offset); 
+			LOGE("Unable to query buffer (%s)", strerror(errno));
+			return ret;
+		}
+
+		V4L2_Contect->mMapMem.mem[i] = mmap (0, buf.length,
+				PROT_READ | PROT_WRITE,
+				MAP_SHARED,
+				V4L2_Contect->mCamFd,
+				buf.m.offset);
 		V4L2_Contect->mMapMem.length = buf.length;
 		LOGV("index: %d, mem: %x, len: %x, offset: %x", i, (int)V4L2_Contect->mMapMem.mem[i], buf.length, buf.m.offset);
- 
-        if (V4L2_Contect->mMapMem.mem[i] == MAP_FAILED) 
+
+		if (V4L2_Contect->mMapMem.mem[i] == MAP_FAILED)
 		{ 
 			LOGE("Unable to map buffer (%s)", strerror(errno)); 
-            return -1; 
-        } 
+			return -1;
+		}
 
 		// start with all buffers in queue
-        ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_QBUF, &buf); 
-        if (ret < 0) 
+		ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_QBUF, &buf);
+		if (ret < 0)
 		{ 
-            LOGE("VIDIOC_QBUF Failed"); 
-            return ret; 
-        } 
+			LOGE("VIDIOC_QBUF Failed");
+			return ret;
+		}
 	} 
 
 	return 0;
@@ -314,8 +377,8 @@ int v4l2StartStreaming(void* v4l2ctx)
 	int ret = -1; 
 	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
-  	ret = ioctl (V4L2_Contect->mCamFd, VIDIOC_STREAMON, &type); 
+
+	ret = ioctl (V4L2_Contect->mCamFd, VIDIOC_STREAMON, &type);
 	if (ret < 0) 
 	{ 
 		LOGE("StartStreaming: Unable to start capture: %s", strerror(errno)); 
@@ -331,7 +394,7 @@ int v4l2StopStreaming(void* v4l2ctx)
 	int ret = -1; 
 	enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
+
 	ret = ioctl (V4L2_Contect->mCamFd, VIDIOC_STREAMOFF, &type); 
 	if (ret < 0) 
 	{ 
@@ -348,17 +411,17 @@ int v4l2UnmapBuf(void* v4l2ctx)
 	int ret = 0;
 	int i;
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
+
 	for (i = 0; i < V4L2_Contect->mBufferCnt; i++) 
 	{
 		ret = munmap(V4L2_Contect->mMapMem.mem[i], V4L2_Contect->mMapMem.length);
-        if (ret < 0) 
+		if (ret < 0)
 		{
-            LOGE("v4l2CloseBuf Unmap failed"); 
+			LOGE("v4l2CloseBuf Unmap failed");
 			return ret;
 		}
 	}
-	
+
 	return 0;
 }
 
@@ -367,20 +430,20 @@ void releasePreviewFrame(void* v4l2ctx, int index)
 	int ret = 0;
 	struct v4l2_buffer buf;
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
+
 	memset(&buf, 0, sizeof(struct v4l2_buffer));
 	buf.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-    buf.memory = V4L2_MEMORY_MMAP; 
+	buf.memory = V4L2_MEMORY_MMAP;
 	buf.index = index;
-	
+
 	// LOGV("r ID: %d", buf.index);
-    ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_QBUF, &buf); 
-    if (ret != 0) 
+	ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_QBUF, &buf);
+	if (ret != 0)
 	{
 		// comment for temp, to do
-         LOGE("releasePreviewFrame: VIDIOC_QBUF Failed: index = %d, ret = %d, %s", 
-			buf.index, ret, strerror(errno)); 
-    }
+		LOGE("releasePreviewFrame: VIDIOC_QBUF Failed: index = %d, ret = %d, %s",
+				buf.index, ret, strerror(errno));
+	}
 }
 
 
@@ -393,11 +456,11 @@ int v4l2WaitCameraReady(void* v4l2ctx)
 
 	FD_ZERO(&fds);
 	FD_SET(V4L2_Contect->mCamFd, &fds);		
-	
+
 	/* Timeout */
 	tv.tv_sec  = 2;
 	tv.tv_usec = 0;
-	
+
 	r = select(V4L2_Contect->mCamFd + 1, &fds, NULL, NULL, &tv);
 	if (r == -1) 
 	{
@@ -416,18 +479,18 @@ int v4l2WaitCameraReady(void* v4l2ctx)
 
 int getPreviewFrame(void* v4l2ctx, struct v4l2_buffer *buf)
 {
-    int ret = 0;
-    V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
-    buf->type   = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-    buf->memory = V4L2_MEMORY_MMAP; 
- 
-    ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_DQBUF, buf); 
-    if (ret < 0) 
+	int ret = 0;
+	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
+
+	buf->type   = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	buf->memory = V4L2_MEMORY_MMAP;
+
+	ret = ioctl(V4L2_Contect->mCamFd, VIDIOC_DQBUF, buf);
+	if (ret < 0)
 	{ 
-        LOGW("GetPreviewFrame: VIDIOC_DQBUF Failed"); 
-        return __LINE__; 			// can not return false
-    }
+		LOGW("GetPreviewFrame: VIDIOC_DQBUF Failed");
+		return __LINE__; 			// can not return false
+	}
 
 	return 0;
 }
@@ -438,7 +501,7 @@ int tryFmt(void* v4l2ctx, int format)
 	struct v4l2_fmtdesc fmtdesc;
 	fmtdesc.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
-	
+
 	for(i = 0; i < 12; i++)
 	{
 		fmtdesc.index = i;
@@ -447,7 +510,7 @@ int tryFmt(void* v4l2ctx, int format)
 			break;
 		}
 		LOGV("format index = %d, name = %s, v4l2 pixel format = %x\n",
-			i, fmtdesc.description, fmtdesc.pixelformat);
+				i, fmtdesc.description, fmtdesc.pixelformat);
 
 		if (fmtdesc.pixelformat == format)
 		{
@@ -460,35 +523,35 @@ int tryFmt(void* v4l2ctx, int format)
 
 int tryFmtSize(void* v4l2ctx, int * width, int * height)
 {
-    int ret = -1;
-    struct v4l2_format fmt;
-    V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
+	int ret = -1;
+	struct v4l2_format fmt;
+	V4L2_CONTEXT *V4L2_Contect = (V4L2_CONTEXT*)v4l2ctx;
 
-    LOGV("V4L2Camera::TryFmtSize: w: %d, h: %d", *width, *height);
+	LOGV("V4L2Camera::TryFmtSize: w: %d, h: %d", *width, *height);
 
-    memset(&fmt, 0, sizeof(fmt));
-    fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-    fmt.fmt.pix.width  = *width; 
-    fmt.fmt.pix.height = *height; 
-    if (V4L2_Contect->mCaptureFormat == V4L2_PIX_FMT_YUYV)
-    {
-       fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
-    }
-    else
-    {
-       fmt.fmt.pix.pixelformat = V4L2_Contect->mCaptureFormat; 
-    }
-    fmt.fmt.pix.field = V4L2_FIELD_NONE;
-    ret = ioctl( V4L2_Contect->mCamFd, VIDIOC_TRY_FMT, &fmt ); 
-    if (ret < 0) 
-    { 
- 	LOGE("VIDIOC_TRY_FMT Failed: %s", strerror(errno)); 
-	return ret; 
-    } 
-    // driver surpport this size
-    *width  = fmt.fmt.pix.width; 
-    *height = fmt.fmt.pix.height; 
-    return 0;
+	memset(&fmt, 0, sizeof(fmt));
+	fmt.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+	fmt.fmt.pix.width  = *width;
+	fmt.fmt.pix.height = *height;
+	if (V4L2_Contect->mCaptureFormat == V4L2_PIX_FMT_YUYV)
+	{
+		fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV;
+	}
+	else
+	{
+		fmt.fmt.pix.pixelformat = V4L2_Contect->mCaptureFormat;
+	}
+	fmt.fmt.pix.field = V4L2_FIELD_NONE;
+	ret = ioctl( V4L2_Contect->mCamFd, VIDIOC_TRY_FMT, &fmt );
+	if (ret < 0)
+	{
+		LOGE("VIDIOC_TRY_FMT Failed: %s", strerror(errno));
+		return ret;
+	}
+	// driver surpport this size
+	*width  = fmt.fmt.pix.width;
+	*height = fmt.fmt.pix.height;
+	return 0;
 }
 
 int getFrameRate(void* v4l2ctx)
@@ -508,11 +571,12 @@ int getFrameRate(void* v4l2ctx)
 
 	int numerator = parms.parm.capture.timeperframe.numerator;
 	int denominator = parms.parm.capture.timeperframe.denominator;
-	
+
 	LOGV("frame rate: numerator = %d, denominator = %d\n", numerator, denominator);
 
 	return denominator / numerator;
 }
+
 
 int setImageEffect(void* v4l2ctx, int effect)
 {
@@ -597,7 +661,7 @@ int enumSize(void* v4l2ctx, char * pSize, int len)
 
 	memset(str, 0, 16);
 	memset(pSize, 0, len);
-	
+
 	for(i = 0; i < 20; i++)
 	{
 		size_enum.index = i;

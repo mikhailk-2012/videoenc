@@ -12,7 +12,8 @@ void DestroyCameraContext(void* v4l2ctx);
 int OpenCamera(void* v4l2ctx);
 void CloseCamera(void* v4l2ctx);
 
-int StartCamera(void* v4l2ctx, int *width, int *height);
+int ConfigureCamera(void* v4l2ctx, int *width, int *height, int framerate);
+int StartCamera(void* v4l2ctx);
 int StopCamera(void* v4l2ctx);
 
 int CameraGetOneframe(void* v4l2ctx, struct v4l2_buffer *buffer);

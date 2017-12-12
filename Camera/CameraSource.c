@@ -86,6 +86,36 @@ EXIT:
 	return (void *)0;
 }
 
+static int configurecamera(AWCameraDevice *p)
+{
+	AWCameraDevice* camera_dev = (AWCameraDevice *)(p);
+	AWCameraContext* CameraCtx = NULL;
+	int err = 0;
+
+	if(!camera_dev)
+		return -1;
+
+	CameraCtx = (AWCameraContext*)(camera_dev->context);
+
+	if(CameraCtx->callback.cookie == NULL) {
+		LOGE("should set callback before start Camera\n");
+		return -1;
+	}
+    camera_dev->isYUYV = 0;
+	setV4L2DeviceName(CameraCtx->v4l2ctx, camera_dev->deviceName );
+	OpenCamera(CameraCtx->v4l2ctx);
+
+	err = ConfigureCamera(CameraCtx->v4l2ctx, &CameraCtx->width, &CameraCtx->height, CameraCtx->framerate);
+	if (err < 0)
+		return err;
+
+    camera_dev->isYUYV = V4L2_PIX_FMT_YUYV == v4l2GetCaptureFmt(CameraCtx->v4l2ctx);
+
+	set_state(CameraCtx, 0);
+
+	return 0;
+}
+
 static int startcamera(AWCameraDevice *p)
 {	
 	AWCameraDevice* camera_dev = (AWCameraDevice *)(p);
@@ -101,17 +131,9 @@ static int startcamera(AWCameraDevice *p)
 		LOGE("should set callback before start Camera");
 		return -1;
 	}
-        camera_dev->isYUYV = 0;
-	setV4L2DeviceName(CameraCtx->v4l2ctx, camera_dev->deviceName );
-	OpenCamera(CameraCtx->v4l2ctx);
-
-	StartCamera(CameraCtx->v4l2ctx, &CameraCtx->width, &CameraCtx->height);
-
-        camera_dev->isYUYV = V4L2_PIX_FMT_YUYV == v4l2GetCaptureFmt(CameraCtx->v4l2ctx);
-
-	err = getFrameRate(CameraCtx->v4l2ctx);
-	LOGD("Camera FPS=%d", err );
 	
+	StartCamera(CameraCtx->v4l2ctx);
+
 	set_state(CameraCtx, 1);
 	
 	// Create the camera thread
@@ -120,7 +142,7 @@ static int startcamera(AWCameraDevice *p)
 		LOGE("Create thread error");
 		return -1;
 	}
-	
+
 	return 0;
 }
 
@@ -154,15 +176,18 @@ void* getV4L2ctx(AWCameraDevice *p)
 	return CameraCtx->v4l2ctx;
 }
 
-int  getV4L2FormatAndSize(AWCameraDevice *p, int *width, int *height, int *pix_fmt )
+int  getV4L2FormatAndSize(AWCameraDevice *p, int *width, int *height, int *pix_fmt, int *fps)
 {
-	if (p == NULL) return -1;
+	if (p == NULL)
+		return -1;
 	AWCameraContext* CameraCtx = p->context;
 
 	*width   = CameraCtx->width;
 	*height  = CameraCtx->height;
-        *pix_fmt = v4l2GetCaptureFmt(CameraCtx->v4l2ctx);
-        return 0;
+    *pix_fmt = v4l2GetCaptureFmt(CameraCtx->v4l2ctx);
+    *fps     = getFrameRate(CameraCtx->v4l2ctx);
+    p->isTvd = getTvd(CameraCtx->v4l2ctx);
+    return 0;
 }
   
 static int returnFrame(AWCameraDevice *p, int id)
@@ -209,7 +234,7 @@ static int getState(AWCameraDevice *p)
 	return get_state(CameraCtx);
 }
   
-AWCameraDevice* CreateCamera(int width, int height)
+AWCameraDevice* CreateCamera(int width, int height, int framerate)
 {
 	AWCameraContext* CameraCtx = NULL;
 	AWCameraDevice* camera_dev = (AWCameraDevice *)malloc(sizeof(AWCameraDevice));
@@ -230,7 +255,7 @@ AWCameraDevice* CreateCamera(int width, int height)
 	CameraCtx->devide_id = 0;
 	CameraCtx->width = width;
 	CameraCtx->height = height;
-	CameraCtx->framerate = 30;
+	CameraCtx->framerate = framerate; //30;
 
 	CameraCtx->v4l2ctx = CreateCameraContext();
 
@@ -242,6 +267,7 @@ AWCameraDevice* CreateCamera(int width, int height)
 
 	pthread_mutex_init(&CameraCtx->lock,NULL);
 
+	camera_dev->configureCamera = configurecamera;
 	camera_dev->startCamera = startcamera;
 	camera_dev->stopCamera = stopcamera;
 	camera_dev->setCameraDatacallback = setCameraDatacallback;

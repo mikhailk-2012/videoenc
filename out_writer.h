@@ -74,7 +74,7 @@ private:
   SimpleFIFO< FIFO_Element, QE_SIZE> m_qFree;
   SimpleFIFO< FIFO_Element, QE_SIZE> m_qReady;
 
-  unsigned char m_h264Header[32];
+  unsigned char m_h264Header[4096];
   int m_headerSize;
 };
 
