@@ -1,0 +1,29 @@
+# Normal rules
+#
+.*
+*.o
+*.o.*
+*.a
+*.so
+*.bin
+*.gz
+*.bz2
+*.lzma
+*.xz
+*.lzo
+*.patch
+
+# video files
+*.h264
+*.avi
+*.mp4
+*.raw
+
+#
+# git files that we don't want to ignore even it they are dot-files
+#
+!.gitignore
+!.mailmap
+
+*~
+
