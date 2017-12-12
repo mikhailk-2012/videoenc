@@ -33,6 +33,7 @@
 #include <string>
 
 #include "aw/vencoder.h"
+#include "libyuv.h"
 
 #include "CameraSource.h"
 #include "water_mark.h"
@@ -390,8 +391,32 @@ void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) 
 }
 
 
+/* NEON optimized memcpy
+ * src, dst and sz must be 64-byte aligned
+ */
+static void __attribute__((always_inline)) neoncopy64byte(unsigned char *dst,
+		unsigned char *src, int sz)
+		{
+	if (((sz | (int)src | (int)dst) & 63)==0)
+	{
+		// aligned data - neon optimized copy
+		asm volatile (
+				"1:                          \n"
+				"    VLDM %[src]!,{d0-d7}                 \n"
+				"    VSTM %[dst]!,{d0-d7}                 \n"
+				"    SUBS %[sz],%[sz],#0x40                 \n"
+				"    BGT 1b                  \n"
+				: [dst]"+r"(dst), [src]"+r"(src), [sz]"+r"(sz)
+				  :
+				  : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
+	}
+	else {
+		// unaligned - slow and safe copy
+		memcpy(dst, src, sz);
+		printf("!\n");
+	}
 
-
+		}
 
 int CameraSourceCallback(void *cookie,  void *data)
 {
@@ -437,14 +462,17 @@ int CameraSourceCallback(void *cookie,  void *data)
 	input_buffer.nPts  = nPts;
 	if( CameraDevice->isYUYV ) {
 
-		/*v4lconvert_yuyv_to_yuv420((const unsigned char *)buffer, (unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC, mwidth, mheight, 0 ); */
-		yuyv_to_nv12((const unsigned char *)buffer, (unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC, mwidth, mheight);
+		//yuyv_to_nv12((const unsigned char *)buffer, (unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC, mwidth, mheight);
+		libyuv::YUY2ToNV12(buffer, mwidth * 2,
+				input_buffer.pAddrVirY, mwidth,
+				input_buffer.pAddrVirC, mwidth,
+				mwidth, mheight);
 	}
 	else {
 		//LOGD("Cam - convert from yuyv1 =%d\n", Y_size );
-		memcpy( (unsigned char *)input_buffer.pAddrVirY, buffer, Y_size );
+		neoncopy64byte( (unsigned char *)input_buffer.pAddrVirY, buffer, Y_size );
 		//LOGD("Cam - convert from yuyv2 =%d\n", UV_size );
-		memcpy( (unsigned char *)input_buffer.pAddrVirC, &buffer[Y_size], UV_size );
+		neoncopy64byte( (unsigned char *)input_buffer.pAddrVirC, &buffer[Y_size], UV_size );
 	}
 	CameraDevice->returnFrame(CameraDevice, p_buf->index);
 
@@ -556,7 +584,7 @@ int main( int argc, char **argv )
 		getV4L2FormatAndSize(venc_cxt->CameraDevice, &w, &h, &fmt, &fps );
 		//printf("Camera: Width=%d, Height=%d, Pix_Fmt=%d\n", w,h,fmt );
 
-*/
+		 */
 
 		if( w != (int)mwidth || h != (int)mheight )
 		{

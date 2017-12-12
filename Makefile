@@ -31,7 +31,7 @@ SRCDIRS:=. Camera watermark
 
 CFLAGS =-Wall -O3 -ldl -pthread -std=c++11 -ggdb
 
-INCLUDES:=$(foreach dir,$(SRCDIRS),-I$(dir)) -I.
+INCLUDES:=$(foreach dir,$(SRCDIRS),-I$(dir)) -I. -I./libyuv/include
 
 SRCCS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.c))
 SRCPPS=$(foreach dir,$(SRCDIRS),$(wildcard $(dir)/*.cpp))
@@ -40,7 +40,7 @@ LIBOBJ=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCCS))))
 LIBOBJ+=$(addprefix $(BUILDPATH)/, $(addsuffix .o, $(basename $(SRCPPS)))) 
 
 #LDFLAGS=  -lcdx_base -ldl -lm -lpthread -lvencoder -lMemAdapter -lVE -L/usr/local/lib/cedarx
-LDFLAGS= -L./../sunxi-cedarx2/src -ldl -lm -lpthread -lcedar_vencoder -lcedar_common -lcedar_base -ggdb
+LDFLAGS= -L./../sunxi-cedarx2/src -ldl -lm -lpthread -lcedar_vencoder -lcedar_common -lcedar_base -ggdb ./libyuv/libyuv.a
 
 all: $(TARGET)
 
