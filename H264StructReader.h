@@ -305,6 +305,6 @@ public:
 };
 
 void nal_start_code_prefix(wbitstream *bs);
-void sps_rbsp(wbitstream *bs, /*VAProfile profile,*/ int frame_bit_rate, int fps, sps_t* seq_param);
+void sps_rbsp(wbitstream *bs, int profile, int frame_bit_rate, int fps, sps_t* seq_param);
 void pps_rbsp(wbitstream *bs, pps_t *pic_param);
 #endif

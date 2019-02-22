@@ -501,25 +501,26 @@ static void nal_header(wbitstream *bs, int nal_ref_idc, int nal_unit_type)
 #define PROFILE_IDC_MAIN        77
 #define PROFILE_IDC_HIGH        100
 //static void sps_rbsp(wbitstream *bs, VAProfile profile, int frame_bit_rate, VAEncSequenceParameterBufferH264 *seq_param)
-void sps_rbsp(wbitstream *bs, /*VAProfile profile,*/ int frame_bit_rate, int fps, sps_t* seq_param)
+void sps_rbsp(wbitstream *bs, int profile, int frame_bit_rate, int fps, sps_t* seq_param)
 {
     int profile_idc;
     int constraint_set_flag;
-#if 0
-    if (profile == VAProfileH264High) {
+#if 1
+    if (profile == PROFILE_IDC_HIGH) {
         profile_idc = PROFILE_IDC_HIGH;
         constraint_set_flag |= (1 << 3); /* Annex A.2.4 */
     }
-    else if (profile == VAProfileH264Main) {
+    else if (profile == PROFILE_IDC_MAIN) {
         profile_idc = PROFILE_IDC_MAIN;
         constraint_set_flag |= (1 << 1); /* Annex A.2.2 */
     } else {
         profile_idc = PROFILE_IDC_BASELINE;
         constraint_set_flag |= (1 << 0); /* Annex A.2.1 */
     }
-#endif
+#else
     profile_idc = PROFILE_IDC_MAIN;
     constraint_set_flag |= (1 << 1); /* Annex A.2.2 */
+#endif
 
     bitstream_put_ui(bs, profile_idc, 8);               /* profile_idc */
 #if 0
@@ -527,13 +528,12 @@ void sps_rbsp(wbitstream *bs, /*VAProfile profile,*/ int frame_bit_rate, int fps
     bitstream_put_ui(bs, !!(constraint_set_flag & 2), 1);                         /* constraint_set1_flag */
     bitstream_put_ui(bs, !!(constraint_set_flag & 4), 1);                         /* constraint_set2_flag */
     bitstream_put_ui(bs, !!(constraint_set_flag & 8), 1);                         /* constraint_set3_flag */
-#endif
-
-
+#else
     bitstream_put_ui(bs, seq_param->constraint_set0_flag, 1);
     bitstream_put_ui(bs, seq_param->constraint_set1_flag, 1);
     bitstream_put_ui(bs, seq_param->constraint_set2_flag, 1);
     bitstream_put_ui(bs, seq_param->constraint_set3_flag, 1);
+#endif
     bitstream_put_ui(bs, seq_param->constraint_set4_flag, 1);
     bitstream_put_ui(bs, seq_param->constraint_set5_flag, 1);
 

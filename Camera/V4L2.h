@@ -8,8 +8,8 @@ extern "C" {
 #include "videodev.h"
 
 // Number of Buffers to request... 
-#define BUFFER_NUMBER  5
-#define MAX_BUFFER_NUM 16
+#define BUFFER_NUMBER  3
+#define MAX_BUFFER_NUM 5
 
 typedef struct v4l2_mem_map_t{
 	void *	mem[MAX_BUFFER_NUM]; 

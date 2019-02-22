@@ -16,24 +16,24 @@ typedef struct CameraParm
 
 int CameraGetOneframe(void* v4l2ctx, struct v4l2_buffer *buffer)
 {
+	int ret;
+
 	/* Wait till FPS timeout expires, or thread exit message is received. */
-	int ret = v4l2WaitCameraReady(v4l2ctx);
+	ret = v4l2WaitCameraReady(v4l2ctx);
 	if (ret != 0)
 	{
-		LOGW("wait v4l2 buffer time out");
+		LOGE("wait v4l2 buffer time out");
 		return __LINE__;
 	}
 	
 	// get one video frame
-	struct v4l2_buffer buf;
-	memset(&buf, 0, sizeof(buf));
-	ret = getPreviewFrame(v4l2ctx,&buf);
+	memset(buffer, 0, sizeof(struct v4l2_buffer));
+	ret = getPreviewFrame(v4l2ctx, buffer);
 	if (ret != 0)
 	{
 		return ret;
 	}
 
-	memcpy(buffer, &buf, sizeof(buf));
 	return 0;
 }
 
@@ -69,11 +69,13 @@ int ConfigureCamera(void* v4l2ctx, int *width, int *height, int framerate)
 	int ret = 0;
 	int pix_fmt = V4L2_PIX_FMT_NV12;
 	//int pix_fmt = V4L2_PIX_FMT_YUYV;
-	int mframerate = framerate; //30;
-
+	int mframerate = framerate;
+	struct v4l2_streamparm params;
 
 	// set capture mode
-	struct v4l2_streamparm params;
+
+	memset(&params, 0, sizeof(params));
+	params.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	params.parm.capture.timeperframe.numerator = 1;
 	params.parm.capture.timeperframe.denominator = mframerate;
 	params.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -89,9 +91,9 @@ int ConfigureCamera(void* v4l2ctx, int *width, int *height, int framerate)
 		return ret;
 
 	// set fps
-	ret =v4l2setCaptureParams(v4l2ctx,&params);
-	if (ret)
-		return ret;
+	//ret =v4l2setCaptureParams(v4l2ctx,&params);
+	//if (ret)
+	//	return ret;
 
 	return 0;
 }
@@ -131,57 +133,3 @@ int StopCamera(void* v4l2ctx)
 
     return 0;
 }
-
-#if 0
-int CameraSetParm()
-{
-	return 0;
-}
-
-int main()
-{
-	int ret = 0;
-	void * mV4l2_ctx = NULL;
-	int mCaptureFormat;
-	int width = 1280;
-	int height = 720;
-
-	int number = 0;
-
-	struct v4l2_buffer buf;
-	memset(&buf, 0, sizeof(buf));
-	
-	mV4l2_ctx = CreateV4l2Context();
-
-	setV4L2DeviceName(mV4l2_ctx, "/dev/video1");
-
-	// open v4l2 camera device
-	ret = OpenCamera(mV4l2_ctx);
-
-	if (ret != 0)
-	{
-		LOGE("openCameraDevice failed\n");
-		return ret;
-	}
-
-	StartCamera(mV4l2_ctx, &width, &height);
-
-	while(number < 300) {
-
-		CameraGetOneframe(mV4l2_ctx,&buf);
-		CameraReturnOneframe(mV4l2_ctx,buf.index);
-		LOGD("test, number: %d",number);
-
-		number ++;
-	}
-	
-	StopCamera(mV4l2_ctx);
-
-	CloseCamera(mV4l2_ctx);
-	DestroyV4l2Context(mV4l2_ctx);
-	mV4l2_ctx = NULL;
-
-	return 0;
-}
-
-#endif

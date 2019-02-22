@@ -64,7 +64,6 @@ private:
 
   bool  m_nv12;
   int   m_fd;
-  bool  m_end;
   int   m_initLen;
   bool  m_hasBuf;
   pthread_cond_t   m_cond;

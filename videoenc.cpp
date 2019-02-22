@@ -32,6 +32,8 @@
 #include <signal.h>
 #include <string>
 
+#include "videoenc.h"
+
 #include "aw/vencoder.h"
 #include "libyuv.h"
 
@@ -42,6 +44,8 @@
 #include "out_writer.h"
 #include "cliOptions.h"
 #include "H264StructReader.h"
+
+
 
 // Hold command line options values...
 static CmdLineOptions g_options;
@@ -162,14 +166,14 @@ void yuyv_to_nv16(const unsigned char *src, unsigned char *dest, unsigned char *
 	dest_c=dest_uv;
 	for (i = 0; i < height; i++) {
 		for (j = 0; j < width; j += 2) {
-			*dest_y++ = *src1++;  // y
-			*dest_c++ = *src1++;  // c
-			*dest_y++ = *src1++;  // y
-			*dest_c++ = *src1++;  // c
+ *dest_y++ = *src1++;  // y
+ *dest_c++ = *src1++;  // c
+ *dest_y++ = *src1++;  // y
+ *dest_c++ = *src1++;  // c
 		}
 	}
 }
-*/
+ */
 
 
 void yuyv_to_nv12(const unsigned char *src, unsigned char *dest, unsigned char *dest_uv, int width, int height)
@@ -178,7 +182,7 @@ void yuyv_to_nv12(const unsigned char *src, unsigned char *dest, unsigned char *
 	unsigned char *src1;
 	unsigned int *src2;
 	unsigned short *dest2;
-	unsigned char *udest, *vdest;
+	unsigned char *vdest;
 
 	/* copy the Y values */
 	src2=(unsigned int *)src;
@@ -293,65 +297,52 @@ void write_bitstream( VideoEncoder *pVideoEnc )
 {
 	static int keyCount = 0;
 	int result = 0;
+	int valid_frame_num;
 	VencOutputBuffer output_buffer;
-	memset(&output_buffer, 0, sizeof(VencOutputBuffer));
-	result = GetOneBitstreamFrame(pVideoEnc, &output_buffer);
-	if(result == 0)
-	{
-		// write the out to the H264 outputs, and also
-		// writes a header, for each 50 frames......
-		for( size_t j = 0; j < writers.size(); j++ )
-		{
-			StreamWriterThread *wr = writers[j];
-			if( !wr->isNV12() )
-			{
-				if( output_buffer.nFlag & VENC_BUFFERFLAG_KEYFRAME )
-				{
-					keyCount++;
-					if( keyCount > 5 )
-					{
-						wr->pushHeader();
-						keyCount = 0;
-					}
-				}
-				wr->pushBuffer( (void*)output_buffer.pData0, output_buffer.nSize0, (void*)output_buffer.pData1, output_buffer.nSize1 );
-			}
-		}
 
-		int motion_flag = 0;
-		VideoEncGetParameter(pVideoEnc, VENC_IndexParamMotionDetectStatus, &motion_flag);
-		if (motion_flag == 1)
-		{
-			set_motion_flag();
-			printf("motion_flag = %d\n", motion_flag);
-		}
-		FreeOneBitStreamFrame( pVideoEnc, &output_buffer );
-	}
-	else
+	valid_frame_num = ValidBitstreamFrameNum(pVideoEnc);
+	if (valid_frame_num <=0)
 	{
-		printf("Error getting bitstream\n");
+		return;
+	}
+	while (valid_frame_num--)
+	{
+		//memset(&output_buffer, 0, sizeof(VencOutputBuffer));
+		result = GetOneBitstreamFrame(pVideoEnc, &output_buffer);
+		if(result == 0)
+		{
+			// write the out to the H264 outputs, and also
+			// writes a header, for each 50 frames......
+			for( size_t j = 0; j < writers.size(); j++ )
+			{
+				StreamWriterThread *wr = writers[j];
+				if( !wr->isNV12() )
+				{
+					if( output_buffer.nFlag & VENC_BUFFERFLAG_KEYFRAME )
+					{
+						keyCount++;
+						if( keyCount > 3 )
+						{
+							wr->pushHeader();
+							keyCount = 0;
+						}
+					}
+					wr->pushBuffer( (void*)output_buffer.pData0, output_buffer.nSize0, (void*)output_buffer.pData1, output_buffer.nSize1 );
+				}
+			}
+			FreeOneBitStreamFrame( pVideoEnc, &output_buffer );
+		}
+		else
+		{
+			printf("Error getting bitstream\n");
+		}
 	}
 }
 
 void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) {
 	VideoEncoder     *pVideoEnc   = venc_cxt->pVideoEnc;
 	int result = 0;
-	unsigned int theWidth;
-	unsigned int theHeight;
 
-	//	VencOutputBuffer output_buffer;
-
-	theWidth    = mwidth;
-	theHeight   = mheight;
-
-	//struct timeval tmNow;
-	//gettimeofday (&tmNow, NULL );
-	//input_buffer->nPts = 1000000*(long long)tmNow.tv_sec + (long long)tmNow.tv_usec;
-	//input_buffer->nPts = 900000*(long long)tmNow.tv_sec + (long long)tmNow.tv_usec;
-	//long long nPts = 1000000 * (long long)tmNow.tv_sec + (long long)tmNow.tv_usec;
-	//nPts = 9*(nPts/10);
-	//input_buffer->nPts  = nPts;
-	//printf("Cam - flush...\n" );
 	result = FlushCacheAllocInputBuffer(pVideoEnc, input_buffer);
 	if(result < 0) {
 		printf("Flush alloc error.\n" );
@@ -360,8 +351,11 @@ void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) 
 	if(result < 0) {
 		printf("Add one input buffer\n" );
 	}
+//printf("E");
 	result = VideoEncodeOneFrame(pVideoEnc);
-	//printf("Cam - encode res = %d\n", result );
+//printf(".%d", result);
+
+
 #if 0
 	// Update any output with RAWVIDEO data from the camera
 	// in NV12 format....
@@ -370,7 +364,7 @@ void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) 
 		StreamWriterThread *wr = writers[j];
 		if( wr->isNV12() )
 		{
-			wr->pushBuffer( (void*)input_buffer->pAddrVirY, theWidth * theHeight * 3/2, 0, 0 );
+			wr->pushBuffer( (void*)input_buffer->pAddrVirY, mwidth * mheight * 3/2, 0, 0 );
 		}
 	}
 #endif
@@ -378,11 +372,16 @@ void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) 
 	ReturnOneAllocInputBuffer(pVideoEnc, input_buffer);
 	if(result == 0)
 	{
-		write_bitstream( pVideoEnc );
-		if( h264Param.nCodingMode==VENC_FIELD_CODING && codecType==VENC_CODEC_H264)
+/*		int motion_flag = 0;
+		result = VideoEncGetParameter(pVideoEnc, VENC_IndexParamMotionDetectStatus, &motion_flag);
+		printf("result=%d\n", result);
+		if (motion_flag != 0 )
 		{
-			write_bitstream( pVideoEnc );
+			//set_motion_flag();
+			printf("motion_flag = %d\n", motion_flag);
 		}
+*/
+		write_bitstream( pVideoEnc );
 	}
 	else
 	{
@@ -394,10 +393,10 @@ void process_in_buffer(Venc_context * venc_cxt, VencInputBuffer *input_buffer ) 
 /* NEON optimized memcpy
  * src, dst and sz must be 64-byte aligned
  */
-static void __attribute__((always_inline)) neoncopy64byte(unsigned char *dst,
-		unsigned char *src, int sz)
+void neoncopy64byte(void *dst, void *src, unsigned int sz)
 		{
-	if (((sz | (int)src | (int)dst) & 63)==0)
+#ifdef USE_NEON_COPY
+	if (((sz | (unsigned int)src | (unsigned int)dst) & 63)==0)
 	{
 		// aligned data - neon optimized copy
 		asm volatile (
@@ -410,13 +409,14 @@ static void __attribute__((always_inline)) neoncopy64byte(unsigned char *dst,
 				  :
 				  : "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7", "cc", "memory");
 	}
-	else {
+	else
+#endif
+	{
 		// unaligned - slow and safe copy
 		memcpy(dst, src, sz);
-		printf("!\n");
+		//		printf("!\n");
 	}
-
-		}
+}
 
 int CameraSourceCallback(void *cookie,  void *data)
 {
@@ -430,7 +430,7 @@ int CameraSourceCallback(void *cookie,  void *data)
 	v4l2_mem_map_t* p_v4l2_mem_map = GetMapmemAddress(getV4L2ctx(CameraDevice));
 
 	if(!venc_cam_cxt->mstart) {
-		printf("p_buf->index = %d\n", p_buf->index);
+		printf("[%s] Camera stopped\n", __FUNCTION__);
 		CameraDevice->returnFrame(CameraDevice, p_buf->index);
 		return 0;
 	}
@@ -455,14 +455,15 @@ int CameraSourceCallback(void *cookie,  void *data)
 		return 0;
 	}
 
-	//LOGW("input buffer size=(%x) %d", p_buf->length, p_buf->length );
-	input_buffer.nPts  =   1000000 * (long long)p_buf->timestamp.tv_sec + (long long)p_buf->timestamp.tv_usec;
-	long long nPts = 1000000*(long long)p_buf->timestamp.tv_sec + (long long)p_buf->timestamp.tv_usec;
+	input_buffer.nPts  =   1000000ul * (long long)p_buf->timestamp.tv_sec + (long long)p_buf->timestamp.tv_usec;
+	long long nPts = 1000000ul*(long long)p_buf->timestamp.tv_sec + (long long)p_buf->timestamp.tv_usec;
 	nPts = 9*(nPts/10);
 	input_buffer.nPts  = nPts;
 	if( CameraDevice->isYUYV ) {
 
-		//yuyv_to_nv12((const unsigned char *)buffer, (unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC, mwidth, mheight);
+		/*yuyv_to_nv12((const unsigned char *)buffer,
+				(unsigned char *)input_buffer.pAddrVirY, (unsigned char *)input_buffer.pAddrVirC,
+				mwidth, mheight); */
 		libyuv::YUY2ToNV12(buffer, mwidth * 2,
 				input_buffer.pAddrVirY, mwidth,
 				input_buffer.pAddrVirC, mwidth,
@@ -476,6 +477,7 @@ int CameraSourceCallback(void *cookie,  void *data)
 	}
 	CameraDevice->returnFrame(CameraDevice, p_buf->index);
 
+
 	pthread_mutex_lock( &g_mutex );
 	bool res = g_inFIFO.enqueue( input_buffer );
 	if( res )  pthread_cond_signal( &g_cond );
@@ -486,7 +488,6 @@ int CameraSourceCallback(void *cookie,  void *data)
 		ReturnOneAllocInputBuffer(pVideoEnc, &input_buffer);
 	}
 
-	//printf( "C");
 	return 0;
 }
 
@@ -540,10 +541,12 @@ int main( int argc, char **argv )
 	VideoEncoder* pVideoEnc = NULL;
 	VencBaseConfig baseConfig;
 	VencAllocateBufferParam bufferParam;
+	VencROIConfig sRoiConfig[4];
 	unsigned int src_width, src_height, dst_width, dst_height;
+	int value;
 	CH264StructReader h264srd;
 	CBitStreamReader * bs;
-	CBitStreamReader * bs2;
+	//CBitStreamReader * bs2;
 	wbitstream wbs;
 	bool cameraOn = true;
 	int  camera_tvd =0;
@@ -623,6 +626,12 @@ int main( int argc, char **argv )
 	fixQP.nPQp = g_options.qMax;
 
 	//* h264 param
+	h264Param.nMaxKeyInterval = g_options.keyInterval;
+	h264Param.sProfileLevel.nProfile = VENC_H264ProfileMain;  //VENC_H264ProfileBaseline;
+	h264Param.sProfileLevel.nLevel   = VENC_H264Level31;
+	h264Param.sQPRange.nMinqp = g_options.qMin;
+	h264Param.sQPRange.nMaxqp = g_options.qMax;
+
 	h264Param.bEntropyCodingCABAC = 1;
 	h264Param.nBitrate    = 1024*g_options.bitrate; /* bps */
 	h264Param.nFramerate  = g_options.fps; /* fps */
@@ -639,11 +648,7 @@ int main( int argc, char **argv )
 		printf( "FRAME_CODING%d\n");
 	}
 
-	h264Param.nMaxKeyInterval = g_options.keyInterval;
-	h264Param.sProfileLevel.nProfile = VENC_H264ProfileHigh;  //VENC_H264ProfileBaseline;
-	h264Param.sProfileLevel.nLevel   = VENC_H264Level31; //VENC_H264Level31;
-	h264Param.sQPRange.nMinqp = g_options.qMin;
-	h264Param.sQPRange.nMaxqp = g_options.qMax;
+
 
 
 
@@ -662,33 +667,82 @@ int main( int argc, char **argv )
 
 	bufferParam.nSizeY = baseConfig.nInputWidth*baseConfig.nInputHeight;
 	bufferParam.nSizeC = baseConfig.nInputWidth*baseConfig.nInputHeight/2;
-	bufferParam.nBufferNum = 4;
+	bufferParam.nBufferNum = 2;
 	printf( "Creating Encode\n" );
 	pVideoEnc = VideoEncCreate(codecType);
 	printf( "Creating Encode: %p\n", pVideoEnc );
 
-	int value;
+
 	VideoEncSetParameter(pVideoEnc, VENC_IndexParamH264Param, &h264Param);
 	value = 0;
 	VideoEncSetParameter(pVideoEnc, VENC_IndexParamIfilter, &value);
 	value = 0 ; //degree
 	VideoEncSetParameter(pVideoEnc, VENC_IndexParamRotation, &value);
 
-
 	VideoEncSetParameter(pVideoEnc, VENC_IndexParamH264FixQP, &fixQP);
-	//VideoEncSetParameter(pVideoEnc, VENC_IndexParamH264CyclicIntraRefresh, &sIntraRefresh);
+	VideoEncSetParameter(pVideoEnc, VENC_IndexParamH264CyclicIntraRefresh, &sIntraRefresh);
+
+
+	sRoiConfig[0].bEnable = 1;
+	sRoiConfig[0].index = 0;
+	sRoiConfig[0].nQPoffset = 1;
+	sRoiConfig[0].sRect.nLeft = 0;
+	sRoiConfig[0].sRect.nTop = 0;
+	sRoiConfig[0].sRect.nWidth = 160;
+	sRoiConfig[0].sRect.nHeight = 160;
+
+
+	sRoiConfig[1].bEnable = 1;
+	sRoiConfig[1].index = 1;
+	sRoiConfig[1].nQPoffset = 10;
+	sRoiConfig[1].sRect.nLeft = 320;
+	sRoiConfig[1].sRect.nTop = 180;
+	sRoiConfig[1].sRect.nWidth = 320;
+	sRoiConfig[1].sRect.nHeight = 180;
+
+
+	sRoiConfig[2].bEnable = 0;
+	sRoiConfig[2].index = 2;
+	sRoiConfig[2].nQPoffset = 10;
+	sRoiConfig[2].sRect.nLeft = 320;
+	sRoiConfig[2].sRect.nTop = 180;
+	sRoiConfig[2].sRect.nWidth = 320;
+	sRoiConfig[2].sRect.nHeight = 180;
+
+
+	sRoiConfig[3].bEnable = 0;
+	sRoiConfig[3].index = 3;
+	sRoiConfig[3].nQPoffset = 10;
+	sRoiConfig[3].sRect.nLeft = 320;
+	sRoiConfig[3].sRect.nTop = 180;
+	sRoiConfig[3].sRect.nWidth = 320;
+	sRoiConfig[3].sRect.nHeight = 180;
+	VideoEncSetParameter(pVideoEnc, VENC_IndexParamROIConfig, &sRoiConfig[0]);
+	VideoEncSetParameter(pVideoEnc, VENC_IndexParamROIConfig, &sRoiConfig[1]);
+	VideoEncSetParameter(pVideoEnc, VENC_IndexParamROIConfig, &sRoiConfig[2]);
+	VideoEncSetParameter(pVideoEnc, VENC_IndexParamROIConfig, &sRoiConfig[3]);
+
+
+
 
 	venc_cxt->base_cfg	= baseConfig;
 	venc_cxt->pVideoEnc = pVideoEnc;
 
 	VideoEncInit(pVideoEnc, &baseConfig);
 
+	//motionParam.nMotionDetectEnable = ~0;
+		motionParam.nMotionDetectEnable = 1;
+		motionParam.nMotionDetectRatio  = 7; /* 0~12, 0 is the best sensitive */
+		VideoEncSetParameter(pVideoEnc, VENC_IndexParamMotionDetectEnable, &motionParam );
+
+
 	VideoEncGetParameter(pVideoEnc, VENC_IndexParamH264SPSPPS, &sps_pps_data);
 	printf("sps_pps size :%d\n", sps_pps_data.nLength );
 	for( int head_num=0; head_num<sps_pps_data.nLength; head_num++)
 	{
-		printf("the sps_pps :%02x\n", *(sps_pps_data.pBuffer+head_num));
+		printf("%02x ", *(sps_pps_data.pBuffer+head_num));
 	}
+	printf("\n");
 	bs = new CBitStreamReader(sps_pps_data.pBuffer, sps_pps_data.nLength);
 	static sps_t sps, sps2;
 	pps_t pps;
@@ -697,7 +751,7 @@ int main( int argc, char **argv )
 	bitstream_start(&wbs);
 	nal_start_code_prefix(&wbs);
 	bitstream_put_ui(&wbs, 0x67, 8); /* sps */
-	sps_rbsp(&wbs, h264Param.nBitrate/1024, g_options.fps, &sps);
+	sps_rbsp(&wbs, h264Param.sProfileLevel.nProfile, h264Param.nBitrate/1024, g_options.fps, &sps);
 
 	while(!bs->IsEnd())
 	{
@@ -723,9 +777,7 @@ int main( int argc, char **argv )
 	waterMarkInit(venc_cam_cxt->waterMark);
 #endif
 
-	motionParam.nMotionDetectEnable = ~0;
-	motionParam.nMotionDetectRatio  = 1; /* 0~12, 0 is the best sensitive */
-	VideoEncSetParameter(pVideoEnc, VENC_IndexParamMotionDetectEnable, &motionParam );
+
 
 	input_size  = mwidth * (mheight + mheight / 2);
 	printf( "InputSize=%d\n", input_size );
@@ -786,8 +838,12 @@ int main( int argc, char **argv )
 	}
 
 	struct sigaction sigact;
-	memset(&sigact, 0, sizeof(sigact));
+	sigemptyset (&sigact.sa_mask);
+	sigact.sa_flags = 0;
 	sigact.sa_handler = handle_int;
+	sigaction (SIGINT, &sigact, NULL);
+	sigaction (SIGTERM, &sigact, NULL);
+
 	while( !quit && venc_cxt->mstart )
 	{
 		if( cameraOn && !venc_cxt->CameraDevice->getState( venc_cxt->CameraDevice ) )
@@ -805,8 +861,8 @@ int main( int argc, char **argv )
 	}
 	fail_out:
 	/* stop camera */
-	//venc_cxt->CameraDevice->stopCamera(venc_cxt->CameraDevice);
-	//DestroyCamera(venc_cxt->CameraDevice);
+	venc_cxt->CameraDevice->stopCamera(venc_cxt->CameraDevice);
+	DestroyCamera(venc_cxt->CameraDevice);
 	venc_cxt->CameraDevice = NULL;
 
 #ifdef WATERMARK
@@ -816,8 +872,11 @@ int main( int argc, char **argv )
 #endif
 
 	ReleaseAllocInputBuffer(pVideoEnc);
+	printf("ReleaseAllocInputBuffer\n");
 	VideoEncUnInit(pVideoEnc);
+	printf("VideoEncUnInit\n");
 	VideoEncDestroy(pVideoEnc);
+	printf("VideoEncDestroy\n");
 	venc_cxt->pVideoEnc = NULL;
 	for( size_t j = 0; j < writers.size(); j++ )
 	{

@@ -23,11 +23,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include "out_writer.h"
 #include <string>
-
 #include <fcntl.h>
 #include <stdint.h>
+
+#include "videoenc.h"
+#include "out_writer.h"
+
+
 
 
 StreamWriterThread::StreamWriterThread( int buf_len, int fd )
@@ -36,7 +39,6 @@ StreamWriterThread::StreamWriterThread( int buf_len, int fd )
    m_fd      = fd;
    m_initLen = buf_len;
    m_hasBuf  = false;
-   m_end     = false;
    threadid  = 0;
    m_nv12    = false;
    for( int i = 0; i < QE_SIZE; i++ )
@@ -48,15 +50,15 @@ StreamWriterThread::StreamWriterThread( int buf_len, int fd )
 
 StreamWriterThread::~StreamWriterThread()
 {
-  end();
   FIFO_Element myBuf;
-  //printf( "Dtor - free = %d\n", m_qFree.count() );
+  end();
+  printf( "Dtor - free = %d\n", m_qFree.count() );
   while( m_qFree.count() )
   {
       myBuf = m_qFree.dequeue();
       free( myBuf.buf );
   }
-  //printf( "Dtor - ready = %d\n", m_qReady.count() );
+  printf( "Dtor - ready = %d\n", m_qReady.count() );
   while( m_qReady.count() )
   {
       myBuf = m_qReady.dequeue();
@@ -71,13 +73,11 @@ StreamWriterThread::~StreamWriterThread()
 
 void StreamWriterThread::end()
 {
-    //printf( "end...\n" );
+    printf("terminating StreamWriterThread::threadLoop\n" );
     if( !threadid ) return;
-    m_end = true;
-    pthread_cond_signal( &m_cond );
+    pthread_cancel(threadid);
     pthread_join( threadid, NULL );
     threadid  = 0;
-    //printf( "end done...\n" );
 }
 
 
@@ -100,45 +100,45 @@ void StreamWriterThread::pushHeader()
 
 void StreamWriterThread::begin()
 {
-    m_end = false;
+    //m_end = false;
     pthread_create( &threadid, NULL, StreamWriterThread::thread_Out, this );
 }
 
 void StreamWriterThread::threadLoop()
 {
-   FIFO_Element myBuf;
-   bool doBuffer = false;
-   //printf( "thread loop starting\n" );
-   while ( !m_end ) 
-   {
-         doBuffer = false;
-       //printf( "loop locking\n" );
-        pthread_mutex_lock( &m_mutex );
-        /* 
-         * Copy the buffer locally, since we might block
-         * in case of a FIFO type of file output!
-         */
-        //printf( "loop waiting\n" );
-        if( !m_qReady.count() )
+	FIFO_Element myBuf;
+	bool doBuffer = false;
+	//printf( "%s starting\n" __FUNCTION__);
+	while ( true )
 	{
-           pthread_cond_wait( &m_cond, &m_mutex );
-        }
-        if( m_qReady.count() )
-	{
-   	   myBuf = m_qReady.dequeue();
-           doBuffer = true;
-        }
-        pthread_mutex_unlock( &m_mutex );
-        //printf( "loop unlock\n" );
- 	if( doBuffer )
-	{
-	    write( m_fd, myBuf.buf, myBuf.size );
-            doBuffer = false;
-            pthread_mutex_lock( &m_mutex );
-            m_qFree.enqueue( myBuf );
-            pthread_mutex_unlock( &m_mutex );
+		doBuffer = false;
+		//printf( "loop locking\n" );
+		pthread_mutex_lock( &m_mutex );
+		/*
+		 * Copy the buffer locally, since we might block
+		 * in case of a FIFO type of file output!
+		 */
+		if ( !m_qReady.count() )
+		{
+			//printf( "loop waiting\n" );
+			pthread_cond_wait( &m_cond, &m_mutex );
+		}
+		if ( m_qReady.count() )
+		{
+			myBuf = m_qReady.dequeue();
+			doBuffer = true;
+		}
+		pthread_mutex_unlock( &m_mutex );
+		//printf( "loop unlock\n" );
+		if ( doBuffer )
+		{
+			write( m_fd, myBuf.buf, myBuf.size );
+			doBuffer = false;
+			pthread_mutex_lock( &m_mutex );
+			m_qFree.enqueue( myBuf );
+			pthread_mutex_unlock( &m_mutex );
+		}
 	}
-   } 
 }
 
 
@@ -163,14 +163,16 @@ void StreamWriterThread::pushBuffer( void *buf0, int len0, void *buf1, int len1 
    if( len0 )
    {
       myBuf = m_qFree.dequeue();
-      memcpy( myBuf.buf, buf0, len0 );
+      //memcpy( myBuf.buf, buf0, len0 );
+      neoncopy64byte(myBuf.buf, buf0, len0);
       myBuf.size = len0;
       m_qReady.enqueue( myBuf );
    }
    if( len1 && m_qFree.count() )
    {
       myBuf = m_qFree.dequeue();
-      memcpy( myBuf.buf, buf1, len1 );
+      //memcpy( myBuf.buf, buf1, len1 );
+      neoncopy64byte(myBuf.buf, buf1, len1);
       myBuf.size = len1;
       m_qReady.enqueue( myBuf );
    }
